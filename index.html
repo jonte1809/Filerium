@@ -16,7 +16,8 @@
     .list{margin-top:20px;padding:10px;border:1px solid #444;border-radius:8px;background:#0b1022}
     .list h2{margin:0 0 10px;font-size:18px}
     .list ul{list-style:none;padding:0;margin:0}
-    .list ul li{margin:6px 0;padding:4px;background:#1f2937;border-radius:6px}
+    .list ul li{margin:6px 0;padding:4px;background:#1f2937;border-radius:6px;display:flex;justify-content:space-between;align-items:center}
+    .list ul li a{color:#fff;text-decoration:underline}
   </style>
 </head>
 <body>
@@ -47,34 +48,7 @@
   </div>
 
   <script>
-    const FIXED_WEBHOOK = "https://discordapp.com/api/webhooks/1408151651520483549/MnbXWrQo5y-OBfE-s15GUHdvSwWJu6BSxcBbPoLxHxE5XNgHnu-MsQ_MpqaxwKe_6e-r";
     const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB
-
-    async function encryptBlob(blob, password) {
-      const enc = new TextEncoder();
-      const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-      const key = await crypto.subtle.deriveKey(
-        {name: "PBKDF2", salt: enc.encode("filerium_salt"), iterations: 100000, hash: "SHA-256"},
-        keyMaterial,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt"]
-      );
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const data = new Uint8Array(await blob.arrayBuffer());
-      const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv}, key, data);
-      return new Blob([iv, new Uint8Array(encrypted)], {type: "application/octet-stream"});
-    }
-
-    async function splitAndEncrypt(file, password) {
-      const parts = [];
-      for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
-        const encryptedSlice = await encryptBlob(slice, password);
-        parts.push(encryptedSlice);
-      }
-      return parts;
-    }
 
     const content = document.getElementById('content');
     const files = document.getElementById('files');
@@ -82,31 +56,19 @@
     const statusDiv = document.getElementById('uploadStatus');
     const uploadedList = document.getElementById('uploadedList');
 
-    function addToList(names) {
-      names.forEach(name => {
-        const li = document.createElement('li');
-        li.textContent = name;
-        uploadedList.appendChild(li);
-      });
+    function addToList(name, url) {
+      const li = document.createElement('li');
+      li.innerHTML = `${name} <a href="${url}" target="_blank">Herunterladen</a>`;
+      uploadedList.appendChild(li);
     }
 
-    sendBtn.addEventListener('click', async () => {
-      statusDiv.textContent = '';
-      const uploads = [];
-      const password = btoa(crypto.getRandomValues(new Uint8Array(16)).reduce((s, b) => s + String.fromCharCode(b), '')).slice(0, 16);
+    sendBtn.addEventListener('click', () => {
+      uploadedList.innerHTML = '';
       for (const file of files.files) {
-        const parts = await splitAndEncrypt(file, password);
-        for (let i = 0; i < parts.length; i++) {
-          const formData = new FormData();
-          const partName = `${file.name}.part${i+1}.enc`;
-          formData.append("file", parts[i], partName);
-          formData.append("payload_json", JSON.stringify({content: content.value}));
-          await fetch(FIXED_WEBHOOK, {method: "POST", body: formData});
-          uploads.push(partName);
-        }
+        const url = URL.createObjectURL(file);
+        addToList(file.name, url);
       }
-      statusDiv.textContent = 'Upload abgeschlossen';
-      addToList(uploads);
+      statusDiv.textContent = 'Dateien sind jetzt herunterladbar';
     });
   </script>
 </body>
