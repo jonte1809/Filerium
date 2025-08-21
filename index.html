@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filerium</title>
+  <style>
+    body{background:#0f172a;color:#e5e7eb;font-family:sans-serif;margin:0;padding:0}
+    .menu{background:#172554;padding:10px;display:flex;justify-content:flex-end;gap:10px}
+    .menu select{padding:6px;border-radius:6px;border:none;background:#0b1022;color:#e5e7eb}
+    .wrap{max-width:900px;margin:20px auto;padding:20px}
+    .card{background:#111827;border-radius:12px;padding:20px}
+    h1{margin:0 0 20px}
+    input,textarea{width:100%;margin:6px 0;padding:8px;border-radius:8px;border:1px solid #555;background:#0b1022;color:#e5e7eb}
+    .btn{margin:10px 5px 10px 0;padding:8px 12px;border-radius:8px;border:none;background:#172554;color:#fff;cursor:pointer}
+    .list{margin-top:20px;padding:10px;border:1px solid #444;border-radius:8px;background:#0b1022}
+    .list h2{margin:0 0 10px;font-size:18px}
+    .list ul{list-style:none;padding:0;margin:0}
+    .list ul li{margin:6px 0;padding:4px;background:#1f2937;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="menu">
+    <label for="language" style="margin-right:5px;">Sprache:</label>
+    <select id="language">
+      <option value="de" selected>Deutsch</option>
+      <option value="en">English</option>
+      <option value="fr">Français</option>
+      <option value="es">Español</option>
+    </select>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h1 id="title">Filerium</h1>
+      <label for="content" id="messageLabel">Nachricht (optional)</label>
+      <textarea id="content"></textarea>
+      <label for="files" id="fileLabel">Datei(en) auswählen</label>
+      <input id="files" type="file" multiple />
+      <button id="sendBtn" class="btn">📤 <span id="uploadBtnText">Hochladen</span></button>
+      <div id="uploadStatus"></div>
+      <div class="list">
+        <h2 id="uploadedTitle">Hochgeladene Dateien</h2>
+        <ul id="uploadedList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FIXED_WEBHOOK = "https://discordapp.com/api/webhooks/1408151651520483549/MnbXWrQo5y-OBfE-s15GUHdvSwWJu6BSxcBbPoLxHxE5XNgHnu-MsQ_MpqaxwKe_6e-r";
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB
+
+    const autoPassword = btoa(crypto.getRandomValues(new Uint8Array(16)).reduce((s,b)=>s+String.fromCharCode(b),'')).slice(0,16);
+
+    async function deriveKey(password) {
+      const keyMaterial = await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveKey"]);
+      return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("filerium_salt"),iterations:100000,hash:"SHA-256"},keyMaterial,{ name:"AES-GCM", length: 256 },false,["encrypt","decrypt"]);
+    }
+
+    async function encryptBlob(blob, password) {
+      const key = await deriveKey(password);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const data = new Uint8Array(await blob.arrayBuffer());
+      const encrypted = await crypto.subtle.encrypt({name:"AES-GCM",iv},key,data);
+      return new Blob([iv,new Uint8Array(encrypted)],{type:"application/octet-stream"});
+    }
+
+    async function splitAndEncrypt(file) {
+      const parts = [];
+      for(let offset=0; offset<file.size; offset+=CHUNK_SIZE){
+        const slice = file.slice(offset, offset+CHUNK_SIZE);
+        const encryptedSlice = await encryptBlob(slice, autoPassword);
+        parts.push(encryptedSlice);
+      }
+      return parts;
+    }
+
+    const content = document.getElementById('content');
+    const files = document.getElementById('files');
+    const sendBtn = document.getElementById('sendBtn');
+    const statusDiv = document.getElementById('uploadStatus');
+    const uploadedList = document.getElementById('uploadedList');
+
+    function addToList(names){
+      names.forEach(name=>{
+        const li = document.createElement('li');
+        li.textContent = name;
+        uploadedList.appendChild(li);
+      });
+    }
+
+    sendBtn.addEventListener('click', async () => {
+      statusDiv.textContent = '';
+      const uploads = [];
+      for(const file of files.files){
+        const parts = await splitAndEncrypt(file);
+        for(let i=0; i<parts.length; i++){
+          const formData = new FormData();
+          const partName = `${file.name}.part${i+1}.enc`;
+          formData.append("file", parts[i], partName);
+          formData.append("payload_json", JSON.stringify({content: content.value}));
+          await fetch(FIXED_WEBHOOK, {method: "POST", body: formData});
+          uploads.push(partName);
+        }
+      }
+      statusDiv.textContent = 'Upload abgeschlossen';
+      addToList(uploads);
+    });
+  </script>
+</body>
+</html>
