@@ -6,10 +6,10 @@
   <title>Filerium</title>
   <style>
     body{background:#0f172a;color:#e5e7eb;font-family:sans-serif;margin:0;padding:0}
-    .menu{background:#172554;padding:10px;display:flex;justify-content:flex-end;gap:10px}
-    .menu select{padding:6px;border-radius:6px;border:none;background:#0b1022;color:#e5e7eb}
+    .menu{background:#172554;padding:10px;display:flex;justify-content:space-between;align-items:center}
+    .menu button{padding:6px 12px;border:none;border-radius:8px;background:#0b1022;color:#e5e7eb;cursor:pointer}
     .wrap{max-width:900px;margin:20px auto;padding:20px}
-    .card{background:#111827;border-radius:12px;padding:20px}
+    .card{background:#111827;border-radius:12px;padding:20px;margin-bottom:20px}
     h1{margin:0 0 20px}
     input,textarea{width:100%;margin:6px 0;padding:8px;border-radius:8px;border:1px solid #555;background:#0b1022;color:#e5e7eb}
     .btn{margin:10px 5px 10px 0;padding:8px 12px;border-radius:8px;border:none;background:#172554;color:#fff;cursor:pointer}
@@ -22,53 +22,87 @@
 </head>
 <body>
   <div class="menu">
-    <label for="language" style="margin-right:5px;">Sprache:</label>
-    <select id="language">
-      <option value="de" selected>Deutsch</option>
-      <option value="en">English</option>
-      <option value="fr">Français</option>
-      <option value="es">Español</option>
-    </select>
+    <div>Filerium</div>
+    <button onclick="openAdmin()">Admin Panel</button>
   </div>
 
-  <div class="wrap">
+  <div class="wrap" id="uploadSection">
     <div class="card">
-      <h1 id="title">Filerium</h1>
-      <label for="content" id="messageLabel">Nachricht (optional)</label>
+      <h1>Upload</h1>
+      <label>Nachricht (optional)</label>
       <textarea id="content"></textarea>
-      <label for="files" id="fileLabel">Datei(en) auswählen</label>
+      <label>Datei(en) auswählen</label>
       <input id="files" type="file" multiple />
-      <button id="sendBtn" class="btn">📤 <span id="uploadBtnText">Hochladen</span></button>
+      <button id="sendBtn" class="btn">📤 Hochladen (Zur Überprüfung)</button>
       <div id="uploadStatus"></div>
+    </div>
+  </div>
+
+  <div class="wrap" id="adminSection" style="display:none;">
+    <div class="card">
+      <h1>Admin Panel</h1>
       <div class="list">
-        <h2 id="uploadedTitle">Hochgeladene Dateien</h2>
-        <ul id="uploadedList"></ul>
+        <h2>Ausstehende Bestätigungen</h2>
+        <ul id="pendingList"></ul>
+      </div>
+      <div class="list">
+        <h2>Freigegebene Dateien</h2>
+        <ul id="approvedList"></ul>
       </div>
     </div>
   </div>
 
   <script>
-    const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB
-
+    const PASSWORD = "18098088";
+    const filesInput = document.getElementById('files');
     const content = document.getElementById('content');
-    const files = document.getElementById('files');
     const sendBtn = document.getElementById('sendBtn');
-    const statusDiv = document.getElementById('uploadStatus');
-    const uploadedList = document.getElementById('uploadedList');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const pendingList = document.getElementById('pendingList');
+    const approvedList = document.getElementById('approvedList');
+    const adminSection = document.getElementById('adminSection');
 
-    function addToList(name, url) {
-      const li = document.createElement('li');
-      li.innerHTML = `${name} <a href="${url}" target="_blank">Herunterladen</a>`;
-      uploadedList.appendChild(li);
+    let pendingFiles = [];
+    let approvedFiles = [];
+
+    function renderLists() {
+      pendingList.innerHTML = '';
+      pendingFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.innerHTML = `${file.name} <button onclick="approveFile(${index})">Bestätigen</button>`;
+        pendingList.appendChild(li);
+      });
+
+      approvedList.innerHTML = '';
+      approvedFiles.forEach(file => {
+        const li = document.createElement('li');
+        li.innerHTML = `${file.name} <a href="${file.url}" download>Herunterladen</a>`;
+        approvedList.appendChild(li);
+      });
+    }
+
+    function approveFile(index) {
+      const file = pendingFiles.splice(index, 1)[0];
+      approvedFiles.push(file);
+      renderLists();
+    }
+
+    function openAdmin() {
+      const inputPass = prompt("Bitte Admin-Passwort eingeben:");
+      if (inputPass === PASSWORD) {
+        adminSection.style.display = 'block';
+      } else {
+        alert('Falsches Passwort!');
+      }
     }
 
     sendBtn.addEventListener('click', () => {
-      uploadedList.innerHTML = '';
-      for (const file of files.files) {
+      for (const file of filesInput.files) {
         const url = URL.createObjectURL(file);
-        addToList(file.name, url);
+        pendingFiles.push({ name: file.name, url });
       }
-      statusDiv.textContent = 'Dateien sind jetzt herunterladbar';
+      uploadStatus.textContent = 'Dateien warten auf Admin-Bestätigung';
+      renderLists();
     });
   </script>
 </body>
